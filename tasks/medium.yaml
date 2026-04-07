@@ -1,0 +1,23 @@
+task_id: "medium"
+description: "Diurnal pattern testing proactive scaling before peaks"
+max_steps: 100
+seed: 123
+workload_pattern: "diurnal"
+base_load: 100
+noise_std: 20.0
+max_servers: 10
+capacity_per_server: 100
+initial_servers: 1
+scaling_delay: 1
+
+grader_bounds:
+  L_max: 150.0
+  S_max: 10.0
+  I_max: 30.0
+  L_SLA: 80.0
+
+grader_weights:
+  w_L: 0.45
+  w_C: 0.25
+  w_I: 0.15
+  w_V: 0.15

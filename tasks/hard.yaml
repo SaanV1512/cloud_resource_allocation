@@ -1,0 +1,23 @@
+task_id: "hard"
+description: "Flash crowd testing rapid reaction and recovery"
+max_steps: 100
+seed: 777
+workload_pattern: "flash_crowd"
+base_load: 100
+noise_std: 50.0
+max_servers: 10
+capacity_per_server: 100
+initial_servers: 1
+scaling_delay: 1
+
+grader_bounds:
+  L_max: 400.0
+  S_max: 10.0
+  I_max: 50.0
+  L_SLA: 200.0
+
+grader_weights:
+  w_L: 0.55
+  w_C: 0.15
+  w_I: 0.10
+  w_V: 0.20

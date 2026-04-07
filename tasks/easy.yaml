@@ -1,0 +1,23 @@
+task_id: "easy"
+description: "Steady workload testing basic stability without oscillation"
+max_steps: 50
+seed: 42
+workload_pattern: "steady"
+base_load: 100
+noise_std: 5.0
+max_servers: 10
+capacity_per_server: 100
+initial_servers: 1
+scaling_delay: 1
+
+grader_bounds:
+  L_max: 50.0
+  S_max: 10.0
+  I_max: 10.0
+  L_SLA: 20.0
+
+grader_weights:
+  w_L: 0.35
+  w_C: 0.40
+  w_I: 0.10
+  w_V: 0.15
