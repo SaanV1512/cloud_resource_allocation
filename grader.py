@@ -1,139 +1,105 @@
-from typing import List, Dict
-# -------------------------------
-# CONFIG (can move to YAML later)
-# -------------------------------
+"""
+app/grader.py — Official grader for the Cloud Autoscaler OpenEnv.
 
-TASK_CONFIG = {
-    "easy": {
-        "weights": {"L": 0.35, "C": 0.40, "I": 0.10, "V": 0.15},
-        "L_max": 500,
-        "S_max": 10,
-        "I_max": 1.0,
-        "sla_threshold": 200,
-    },
-    "medium": {
-        "weights": {"L": 0.45, "C": 0.25, "I": 0.15, "V": 0.15},
-        "L_max": 800,
-        "S_max": 10,
-        "I_max": 1.0,
-        "sla_threshold": 300,
-    },
-    "hard": {
-        "weights": {"L": 0.55, "C": 0.15, "I": 0.10, "V": 0.20},
-        "L_max": 1200,
-        "S_max": 10,
-        "I_max": 1.0,
-        "sla_threshold": 400,
-    },
-}
+Reads bounds and weights from the TaskConfig (sourced from tasks/*.yaml),
+and consumes the episode_history produced by AutoscalerEnv.
 
-def compute_metrics(logs: List[Dict], task_name: str) -> Dict:
+Called by main.py at GET /grader after an episode is complete.
+"""
+
+from typing import List, Dict, Any
+from app.models import TaskConfig
+
+
+def grade_episode(episode_history: List[Dict[str, Any]], config: TaskConfig) -> Dict:
     """
-    logs: list of dicts with keys:
-        - state (State object)
-        - action
-        - reward
+    Score a completed episode using the normalised penalty formula:
+
+        score = 1.0 - (w_L * L̂ + w_C * Ĉ + w_I * Î + w_V * V̂)
+
+    Each component is the *episode-level* average, normalised to [0, 1]
+    using the task-specific bounds from the YAML config.
+
+    Args:
+        episode_history: list of step dicts from AutoscalerEnv.episode_history.
+                         Each entry has keys: observation, action, reward, info.
+        config:          TaskConfig loaded from tasks/<task_id>.yaml.
+
+    Returns:
+        dict with score [0.0, 1.0] and a full breakdown of raw/normalised metrics.
     """
+    bounds  = config.grader_bounds
+    weights = config.grader_weights
+    T = len(episode_history)
 
-    config = TASK_CONFIG[task_name]
-    sla_threshold = config["sla_threshold"]
+    if T == 0:
+        return {"score": 0.0, "error": "Empty episode history"}
 
-    total_latency = 0.0
-    total_servers = 0.0
-    instability = 0.0
-    sla_violations = 0.0
+    # ------------------------------------------------------------------
+    # Accumulate raw metrics across all steps
+    # ------------------------------------------------------------------
+    total_latency    = 0.0
+    total_servers    = 0.0
+    total_instability = 0.0
+    sla_violations   = 0
 
-    T = len(logs)
+    for i, step in enumerate(episode_history):
+        obs  = step["observation"]
+        info = step["info"]
 
-    for i in range(T):
-        state = logs[i]["state"]
+        # Latency proxy: recorded per-step in info (L_t = q_t + overflow)
+        total_latency += info["latency"]
 
-        # latency proxy
-        latency = state.queue
-        total_latency += latency
+        # Cost proxy: active servers at this step
+        total_servers += obs.active_servers
 
-        # cost proxy
-        total_servers += state.servers
-
-        # SLA violation
-        if latency > sla_threshold:
+        # SLA violation: latency exceeded the threshold this step
+        if info["latency"] > bounds.L_SLA:
             sla_violations += 1
 
-        # instability (change in servers)
-        if i > 0:
-            prev_servers = logs[i - 1]["state"].servers
-            instability += abs(state.servers - prev_servers)
+        # Instability: server count change (already computed in simulator)
+        total_instability += info["instability"]
 
-    avg_latency = total_latency / T
-    avg_cost = total_servers / T
-    instability = instability / max(1, (T - 1))
-    sla_violations = sla_violations / T
+    # ------------------------------------------------------------------
+    # Compute episode-level averages
+    # ------------------------------------------------------------------
+    avg_latency    = total_latency / T
+    avg_cost       = total_servers / T
+    avg_instability = total_instability / max(T - 1, 1)   # avoid div-by-zero on 1-step episodes
+    sla_rate       = sla_violations / T                    # fraction of steps with violations
 
-    return {
-        "avg_latency": avg_latency,
-        "avg_cost": avg_cost,
-        "instability": instability,
-        "sla_violations": sla_violations,
-    }
+    # ------------------------------------------------------------------
+    # Normalise each component to [0, 1]
+    # ------------------------------------------------------------------
+    L_hat = min(1.0, avg_latency     / bounds.L_max)
+    C_hat = min(1.0, avg_cost        / bounds.S_max)
+    I_hat = min(1.0, avg_instability / max(bounds.I_max, 1))
+    V_hat = min(1.0, sla_rate)                             # already in [0, 1]
 
-
-def normalize(metrics: Dict, task_name: str) -> Dict:
-    config = TASK_CONFIG[task_name]
-
-    L = min(1.0, metrics["avg_latency"] / config["L_max"])
-    C = min(1.0, metrics["avg_cost"] / config["S_max"])
-    I = min(1.0, metrics["instability"] / config["I_max"])
-    V = metrics["sla_violations"]  # already 0–1
-
-    return {"L": L, "C": C, "I": I, "V": V}
-
-
-def score(metrics: Dict, task_name: str) -> float:
-    config = TASK_CONFIG[task_name]
-    weights = config["weights"]
-
-    norm = normalize(metrics, task_name)
-
-    loss = (
-        weights["L"] * norm["L"]
-        + weights["C"] * norm["C"]
-        + weights["I"] * norm["I"]
-        + weights["V"] * norm["V"]
+    # ------------------------------------------------------------------
+    # Compute final score
+    # ------------------------------------------------------------------
+    penalty = (
+        weights.w_L * L_hat +
+        weights.w_C * C_hat +
+        weights.w_I * I_hat +
+        weights.w_V * V_hat
     )
-
-    final_score = max(0.0, min(1.0, 1.0 - loss))
-    return final_score
-
-
-def grade_episode(logs: List[Dict], task_name: str) -> Dict:
-    """
-    Returns full evaluation for one episode
-    """
-    metrics = compute_metrics(logs, task_name)
-    final_score = score(metrics, task_name)
+    final_score = round(max(0.0, min(1.0, 1.0 - penalty)), 4)
 
     return {
-        "task": task_name,
-        "score": final_score,
-        **metrics,
+        "task":            config.task_id,
+        "score":           final_score,
+        # Raw episode averages
+        "avg_latency":     round(avg_latency, 4),
+        "avg_cost":        round(avg_cost, 4),
+        "avg_instability": round(avg_instability, 4),
+        "sla_violations":  sla_violations,
+        "sla_rate":        round(sla_rate, 4),
+        # Normalised components (useful for debugging)
+        "L_hat":           round(L_hat, 4),
+        "C_hat":           round(C_hat, 4),
+        "I_hat":           round(I_hat, 4),
+        "V_hat":           round(V_hat, 4),
+        "steps":           T,
     }
-
-
-TASK_WEIGHTS = {
-    "easy": 0.2,
-    "medium": 0.3,
-    "hard": 0.5,
-}
-
-
-def aggregate_scores(results: List[Dict]) -> float:
-    """
-    results: list of outputs from grade_episode()
-    """
-    total = 0.0
-
-    for r in results:
-        task = r["task"]
-        total += TASK_WEIGHTS[task] * r["score"]
-
-    return total
