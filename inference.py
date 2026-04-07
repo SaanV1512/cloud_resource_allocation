@@ -1,5 +1,5 @@
 import requests
-
+from agent import AdaptiveAgent
 BASE_URL = "http://localhost:8000"
 
 print("[START]")
@@ -21,14 +21,15 @@ data = reset_res.json()
 
 session_id = data["session_id"]
 state = data["observation"]
-
+from app.models import AutoscalerObservation
+agent  = AdaptiveAgent()
 done = False
 
 # 3. Run episode
 step_count = 0
-
+obs = AutoscalerObservation(**state)
 while not done:
-    action = 0  # dummy action for now
+    action = agent.act(obs)  # Use the adaptive agent to choose an action
 
     print(f"[STEP {step_count}] action={action}")
 
@@ -41,12 +42,16 @@ while not done:
     )
 
     data = step_res.json()
-
-    state = data["observation"]
+    obs = AutoscalerObservation(**data["observation"])
+    #state = data["observation"]
     reward = data["reward"]
     done = data["done"]
+    info = data["info"]
 
-    print(f"   reward={reward}")
+    agent.learn(reward, info)  # Update the agent based on feedback
+
+    if step_count%10 == 0:
+        print(f"[Step {step_count}] Action: {action}, Reward: {reward}, Servers: {obs.active_servers}")
 
     step_count += 1
 

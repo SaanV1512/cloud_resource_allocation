@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from app.models import TaskConfig, AutoscalerAction
 from app.env import AutoscalerEnv
-from grader import grade_episode
+from app.grader import grade_episode
 
 
 # ---------------------------------------------------------------------------
