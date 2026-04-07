@@ -93,6 +93,7 @@ class AdaptiveAgent:
         # Instability → reduce sensitivity
         if instability > 0.5:
             self.u_high = min(0.9, self.u_high + 0.01)
+#how to use in environment:
 # agent = AdaptiveAgent()
 
 # state = env.reset()
