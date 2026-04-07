@@ -16,14 +16,15 @@ class AdaptiveAgent:
         self.epsilon = 0.05
 
     def act(self, state):
-        d_t = state["demand"]
-        q_t = state["queue"]
-        u_t = state["utilization"]
+        # state is an AutoscalerObservation object
+        d_t = state.current_requests
+        q_t = state.queue_length
+        u_t = state.cpu_utilization
 
         # previous values
         if self.prev_state:
-            d_prev = self.prev_state["demand"]
-            q_prev = self.prev_state["queue"]
+            d_prev = self.prev_state.current_requests
+            q_prev = self.prev_state.queue_length
         else:
             d_prev = d_t
             q_prev = q_t
