@@ -68,12 +68,15 @@ class AutoscalerEnv:
         reward = self._compute_reward(raw)
 
         info = {
-            "step":        raw["step"],
-            "capacity":    raw["capacity"],
-            "latency":     raw["latency"],
-            "overflow":    raw["overflow"],
-            "instability": raw["instability"],
-            "reward":      reward,
+            "step":           raw["step"],
+            "capacity":       raw["capacity"],
+            "latency":        raw["latency"],
+            "overflow":       raw["overflow"],
+            "instability":    raw["instability"],
+            "reward":         reward,
+            # Mismatch 2 fix: cost and sla_violations needed by agent.learn()
+            "cost":           round(raw["active_servers"] / self.config.max_servers, 4),
+            "sla_violations": 1 if raw["latency"] > self.config.grader_bounds.L_SLA else 0,
         }
 
         result = StepResult(
