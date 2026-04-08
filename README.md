@@ -99,8 +99,8 @@ python inference.py
 This script:
 - fetches available tasks
 - resets the environment for the first task
-- repeatedly calls `/step` with the `AdaptiveAgent` action
-- updates the agent using feedback from each step
+- repeatedly calls `/step` using an LLM prompt via the OpenAI client
+- uses strict STDOUT logging formatting required by the OpenEnv validation
 - retrieves the final graded episode score
 
 ---
