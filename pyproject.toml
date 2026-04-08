@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cloud_resource_allocation"
+version = "1.0.0"
+description = "A cloud autoscaling environment for managing server capacity against dynamic workloads."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.5.0",
+    "numpy>=1.24.0",
+    "pyyaml>=6.0",
+    "requests>=2.31.0",
+    "openai>=1.0.0",
+]
+
+[tool.setuptools]
+packages = ["app"]
