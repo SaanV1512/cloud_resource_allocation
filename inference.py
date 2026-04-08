@@ -9,7 +9,7 @@ tasks_res = requests.get(f"{BASE_URL}/tasks")
 tasks = tasks_res.json()["tasks"]
 
 # pick first task (you can change later)
-task_id = tasks[0]["task_id"]
+task_id = tasks[1]["task_id"]
 print(f"[INFO] Using task: {task_id}")
 
 # 2. Reset environment

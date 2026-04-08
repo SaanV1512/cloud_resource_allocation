@@ -3,7 +3,7 @@ import random
 class AdaptiveAgent:
     def __init__(self):
         # Initial thresholds
-        self.u_high = 0.8
+        self.u_high = 0.95
         self.u_mid  = 0.7
         self.u_low  = 0.3
         self.Q_high = 5
@@ -13,13 +13,15 @@ class AdaptiveAgent:
         self.last_action = None
 
         # Exploration
-        self.epsilon = 0.05
+        self.epsilon = 0
 
     def act(self, state):
         # state is an AutoscalerObservation object
         d_t = state.current_requests
         q_t = state.queue_length
         u_t = state.cpu_utilization
+
+        current_capacity = state.active_servers * 100
 
         # previous values
         if self.prev_state:
@@ -33,14 +35,19 @@ class AdaptiveAgent:
         if random.random() < self.epsilon:
             action = random.choice([-1, 0, 1])
         else:
+            if(self.last_action == 1) and q_t < 50:
+                action = 0
+            elif q_t > 20 or (d_t > current_capacity):
+                action = 1
             # backlog priority
-            if q_t > self.Q_high:
+            elif q_t > self.Q_high:
                 action = 1
 
             # trend
             elif (d_t > d_prev) and (u_t > self.u_mid):
                 action = 1
-
+            elif (d_t>d_prev*1.2):
+                action = 1
             # overload
             elif (u_t > self.u_high) and (q_t > q_prev):
                 action = 1
@@ -48,13 +55,15 @@ class AdaptiveAgent:
             # scale down
             elif (u_t < self.u_low) and (q_t == 0):
                 action = -1
+            elif (u_t < 0.5) and (q_t < 10):
+                action = -1
 
             else:
                 action = 0
 
         # stability rule
-        if self.last_action == 1 and action == 1:
-            action = 0
+        # if self.last_action == 1 and action == 1:
+        #     action = 0
 
         # update memory
         self.prev_state = state
@@ -79,7 +88,7 @@ class AdaptiveAgent:
 
         # High latency → react earlier
         if latency > 0.7:
-            self.u_high = max(0.6, self.u_high - 0.02)
+            self.u_high = max(0.4, self.u_high - 0.02)
             self.Q_high = max(2, self.Q_high - 1)
 
         # High cost → scale down earlier
@@ -88,7 +97,8 @@ class AdaptiveAgent:
 
         # SLA violations → be aggressive
         if sla > 0:
-            self.u_high = max(0.6, self.u_high - 0.03)
+            self.u_high = max(0.6, self.u_high - 0.1)
+            self.u_mid = max(0.5, self.u_mid - 0.05)
             self.Q_high = max(2, self.Q_high - 1)
 
         # Instability → reduce sensitivity
