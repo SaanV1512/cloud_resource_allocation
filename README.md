@@ -1,3 +1,16 @@
+---
+title: Cloud Resource Allocation
+emoji: 🚀
+colorFrom: blue
+colorTo: red
+sdk: docker
+sdk_version: 3.11
+app_port: 7860
+pinned: false
+tags:
+- openenv
+---
+
 # Cloud Resource Allocation
 
 A FastAPI-based cloud autoscaling environment for benchmarking autoscaler agents against synthetic workloads.
@@ -137,6 +150,18 @@ The allowed actions are:
 
 ---
 
+## Observation Space
+
+The observation is an `AutoscalerObservation` object with the following fields:
+
+- `current_requests` (int): Demand at current timestep
+- `previous_requests` (int): Demand at previous timestep  
+- `active_servers` (int): Supply of active servers
+- `cpu_utilization` (float): Load per server (0.0 to 1.5)
+- `queue_length` (int): Backlog of requests
+
+---
+
 ## Scoring
 
 The grader computes a final score in `[0.0, 1.0]` using normalized penalties for:
@@ -146,6 +171,18 @@ The grader computes a final score in `[0.0, 1.0]` using normalized penalties for
 - SLA violations
 
 The same normalized components are used by the environment reward function, so agents can learn against a consistent objective.
+
+---
+
+## Baseline Scores
+
+The included `AdaptiveAgent` (rule-based autoscaler) achieves the following scores:
+
+- `easy`: 0.9200
+- `medium`: 0.8843  
+- `hard`: 0.7224
+
+These scores represent a reasonable starting point for reinforcement learning agents.
 
 ---
 
