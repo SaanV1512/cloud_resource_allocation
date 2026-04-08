@@ -1,0 +1,21 @@
+name: cloud_resource_allocation
+version: 1.0.0
+description: "A cloud autoscaling environment for managing server capacity against dynamic workloads."
+entry_point: "app.main:app"  # This tells OpenEnv how to start your FastAPI server
+
+# Define the tasks for the validator and the agents
+tasks:
+  - id: "easy"
+    difficulty: "easy"
+    description: "Steady-state workload. Focus on cost-efficiency."
+    config_path: "tasks/easy.yaml"
+
+  - id: "medium"
+    difficulty: "medium"
+    description: "Diurnal sine-wave workload. Requires trend-following."
+    config_path: "tasks/medium.yaml"
+
+  - id: "hard"
+    difficulty: "hard"
+    description: "Flash crowd workload. Requires rapid response and queue recovery."
+    config_path: "tasks/hard.yaml"
