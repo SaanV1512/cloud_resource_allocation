@@ -52,7 +52,7 @@ def load_tasks():
 # ---------------------------------------------------------------------------
 
 class ResetRequest(BaseModel):
-    task_id: str = "easy" #default to easy for quick testing, but can be set to medium or hard
+    task_id: str = "easy"
 
 class StepRequest(BaseModel):
     session_id: str
@@ -62,16 +62,12 @@ class StepRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
 @app.get("/", tags=["System"])
 def root():
-    """
-    Root endpoint required for Hugging Face Spaces health checks.
-    """
-    return {
-        "status": "ok", 
-        "message": "Cloud Autoscaler API is running",
-        "documentation": "/docs"
-    }
+    """Root endpoint — used by HF Spaces health-checks."""
+    return {"status": "ok", "message": "Cloud Resource Allocation API is running"}
+
 
 @app.get("/health", tags=["System"])
 def health():
@@ -104,7 +100,7 @@ def list_tasks():
 
 
 @app.post("/reset", tags=["Environment"])
-def reset(req: ResetRequest):
+def reset(req: ResetRequest = ResetRequest()):
     """
     Start a new episode for the requested task.
 
