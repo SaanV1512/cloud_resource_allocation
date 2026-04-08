@@ -1,19 +1,24 @@
 import os
+import time
 import requests
 import textwrap
 from openai import OpenAI
 from app.models import AutoscalerObservation
 
-# --- MANDATORY CONFIGURATION ---
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+# The endpoint where your FastAPI environment is running
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:7860")
+
+# The endpoint for the LLM provider (separate from the environment!)
+LLM_API_BASE = os.getenv("LLM_API_BASE") or os.getenv("OPENAI_API_BASE")
+
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 HF_TOKEN = os.getenv("HF_TOKEN")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 BENCHMARK = "cloud_resource_allocation"
 SUCCESS_SCORE_THRESHOLD = 0.5 
 
-# MANDATORY: Initialize OpenAI Client
-client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+# MANDATORY: Initialize OpenAI Client (Pointing to LLM provider, NOT Environment)
+client = OpenAI(base_url=LLM_API_BASE, api_key=HF_TOKEN)
 
 SYSTEM_PROMPT = textwrap.dedent(
     """
@@ -30,17 +35,14 @@ SYSTEM_PROMPT = textwrap.dedent(
 ).strip()
 
 
-def log_start(task: str, env: str, model: str) -> None:
-    print(f"[START] task={task} env={env} model={model}", flush=True)
+def log_start(task: str) -> None:
+    print(f"[START] task={task}", flush=True)
 
-def log_step(step: int, action: str, reward: float, done: bool, error: str = "null") -> None:
-    done_val = str(done).lower()
-    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error}", flush=True)
+def log_step(step: int, reward: float) -> None:
+    print(f"[STEP] step={step} reward={reward:.2f}", flush=True)
 
-def log_end(success: bool, steps: int, score: float, rewards: list) -> None:
-    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    success_val = str(success).lower()
-    print(f"[END] success={success_val} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
+def log_end(task: str, score: float, steps: int) -> None:
+    print(f"[END] task={task} score={score:.3f} steps={steps}", flush=True)
 
 
 def build_user_prompt(step: int, obs: AutoscalerObservation, last_reward: float) -> str:
@@ -85,20 +87,21 @@ def get_action_from_llm(step: int, obs: AutoscalerObservation, last_reward: floa
 
 
 def run_task(task_id):
-    # --- Initialization (Fixed Scope) ---
+    # MANDATORY: Start logging IMMEDIATELY so validator sees the [START] block
+    log_start(task=task_id)
+
     rewards = []
     step_count = 0
     score = 0.0
     success = False
     session_id = None
-    started_logging = False
 
     try:
         # 1. Reset Environment
         reset_res = requests.post(
             f"{API_BASE_URL}/reset", 
             json={"task_id": task_id}, 
-            timeout=10
+            timeout=15
         )
         reset_res.raise_for_status()
         
@@ -107,10 +110,6 @@ def run_task(task_id):
         obs_data = data["observation"]
         obs_data.setdefault("previous_requests", 0)  # Handle missing previous_requests
         obs = AutoscalerObservation(**obs_data)
-
-        # Only start logging once the environment actually responds
-        log_start(task=task_id, env=BENCHMARK, model=MODEL_NAME)
-        started_logging = True
 
         done = False
         last_reward = 0.0
@@ -147,7 +146,7 @@ def run_task(task_id):
             rewards.append(reward)
 
             # Mandatory [STEP] log
-            log_step(step=step_count, action=str(action), reward=reward, done=done, error=error_val)
+            log_step(step=step_count, reward=reward)
 
         # 3. Final Grader Call
         if session_id:
@@ -165,20 +164,42 @@ def run_task(task_id):
         print(f"[DEBUG] Task {task_id} failed: {e}", flush=True)
 
     finally:
-        # Guarantee the [END] log is emitted if [START] was reached
-        if started_logging:
-            log_end(success=success, steps=step_count, score=score, rewards=rewards)
+        # Final block: emit [END]
+        log_end(task=task_id, score=score, steps=step_count)
 
 
 if __name__ == "__main__":
+    print(f"# Attempting to connect to Environment at {API_BASE_URL}...", flush=True)
+
+    # 1. Wait for server (up to 30s)
+    env_ready = False
+    for i in range(15):
+        try:
+            # Try both /health and just the root (HF Spaces might only respond to /)
+            requests.get(f"{API_BASE_URL}/health", timeout=2)
+            env_ready = True
+            print(f"# Environment is LIVE at {API_BASE_URL}", flush=True)
+            break
+        except Exception as e:
+            print(f"# Waiting for environment... ({i+1}/15) {e}", flush=True)
+            time.sleep(2)
+
+    available_tasks = []
     try:
-        # Fetch task list from the environment
-        tasks_res = requests.get(f"{API_BASE_URL}/tasks", timeout=5)
+        # 2. Fetch task list from the environment
+        tasks_res = requests.get(f"{API_BASE_URL}/tasks", timeout=10)
         tasks_res.raise_for_status()
-        available_tasks = tasks_res.json()["tasks"]
-        
-        for t in available_tasks:
-            run_task(t["task_id"])
-            
+        available_tasks = tasks_res.json().get("tasks", [])
     except Exception as e:
-        print(f"[CRITICAL] Failed to connect to Environment at {API_BASE_URL}: {e}")
+        print(f"# Task discovery failed: {e}", flush=True)
+
+    # 3. Fallback: If no tasks found, try "easy" anyway
+    if not available_tasks:
+        print("# No tasks discovered via API. Falling back to default 'easy' task.", flush=True)
+        available_tasks = [{"task_id": "easy"}]
+        
+    for t in available_tasks:
+        try:
+            run_task(t["task_id"])
+        except Exception as e:
+            print(f"# Task {t['task_id']} failed at runtime: {e}", flush=True)
