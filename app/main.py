@@ -52,7 +52,7 @@ def load_tasks():
 # ---------------------------------------------------------------------------
 
 class ResetRequest(BaseModel):
-    task_id: str
+    task_id: str = "easy"
 
 class StepRequest(BaseModel):
     session_id: str
