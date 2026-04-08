@@ -52,7 +52,7 @@ def load_tasks():
 # ---------------------------------------------------------------------------
 
 class ResetRequest(BaseModel):
-    task_id: str
+    task_id: str = "easy"  # default to "easy" for quick local testing
 
 class StepRequest(BaseModel):
     session_id: str
@@ -64,6 +64,15 @@ class StepRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 @app.get("/health", tags=["System"])
+def root():
+    """
+    Root endpoint required for Hugging Face Spaces health checks.
+    """
+    return {
+        "status": "ok", 
+        "message": "Cloud Autoscaler API is running",
+        "documentation": "/docs"
+    }
 def health():
     """Ping endpoint — used by the validation script to confirm the server is live."""
     return {"status": "ok", "tasks_loaded": len(TASK_CONFIGS)}
