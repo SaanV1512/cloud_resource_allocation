@@ -105,6 +105,7 @@ def run_task(task_id):
         data = reset_res.json()
         session_id = data["session_id"]
         obs_data = data["observation"]
+        obs_data.setdefault("previous_requests", 0)  # Handle missing previous_requests
         obs = AutoscalerObservation(**obs_data)
 
         # Only start logging once the environment actually responds
