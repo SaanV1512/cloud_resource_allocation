@@ -16,7 +16,11 @@ dependencies = [
     "pyyaml>=6.0",
     "requests>=2.31.0",
     "openai>=1.0.0",
+    "openenv-core>=0.2.0",
 ]
 
+[project.scripts]
+server = "server.app:app"
+
 [tool.setuptools]
-packages = ["app"]
+packages = ["app", "server"]
