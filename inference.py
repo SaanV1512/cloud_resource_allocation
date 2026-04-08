@@ -5,20 +5,20 @@ import textwrap
 from openai import OpenAI
 from app.models import AutoscalerObservation
 
-# The endpoint where your FastAPI environment is running
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:7860")
+# --- MANDATORY CONFIGURATION ---
+# The validator injects these specifically for the LLM Proxy in Phase 2
+LLM_API_BASE = os.getenv("API_BASE_URL")
+LLM_API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
 
-# The endpoint for the LLM provider (separate from the environment!)
-LLM_API_BASE = os.getenv("LLM_API_BASE") or os.getenv("OPENAI_API_BASE")
+# The endpoint for your FastAPI environment (internal to the evaluator container)
+ENV_API_URL = os.getenv("ENV_API_URL", "http://localhost:7860")
 
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-HF_TOKEN = os.getenv("HF_TOKEN")
-LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 BENCHMARK = "cloud_resource_allocation"
 SUCCESS_SCORE_THRESHOLD = 0.5 
 
-# MANDATORY: Initialize OpenAI Client (Pointing to LLM provider, NOT Environment)
-client = OpenAI(base_url=LLM_API_BASE, api_key=HF_TOKEN)
+# MANDATORY: Initialize OpenAI Client with LiteLLM Proxy (as required by validator)
+client = OpenAI(base_url=LLM_API_BASE, api_key=LLM_API_KEY)
 
 SYSTEM_PROMPT = textwrap.dedent(
     """
@@ -99,7 +99,7 @@ def run_task(task_id):
     try:
         # 1. Reset Environment
         reset_res = requests.post(
-            f"{API_BASE_URL}/reset", 
+            f"{ENV_API_URL}/reset", 
             json={"task_id": task_id}, 
             timeout=15
         )
@@ -123,7 +123,7 @@ def run_task(task_id):
 
             # 2. Step Environment
             step_res = requests.post(
-                f"{API_BASE_URL}/step",
+                f"{ENV_API_URL}/step",
                 json={
                     "session_id": session_id,
                     "action": {"scale_change": action}
@@ -151,7 +151,7 @@ def run_task(task_id):
         # 3. Final Grader Call
         if session_id:
             grader_res = requests.get(
-                f"{API_BASE_URL}/grader", 
+                f"{ENV_API_URL}/grader", 
                 params={"session_id": session_id},
                 timeout=5
             )
@@ -169,16 +169,15 @@ def run_task(task_id):
 
 
 if __name__ == "__main__":
-    print(f"# Attempting to connect to Environment at {API_BASE_URL}...", flush=True)
+    print(f"# Attempting to connect to Environment at {ENV_API_URL}...", flush=True)
 
     # 1. Wait for server (up to 30s)
     env_ready = False
     for i in range(15):
         try:
-            # Try both /health and just the root (HF Spaces might only respond to /)
-            requests.get(f"{API_BASE_URL}/health", timeout=2)
+            requests.get(f"{ENV_API_URL}/health", timeout=2)
             env_ready = True
-            print(f"# Environment is LIVE at {API_BASE_URL}", flush=True)
+            print(f"# Environment is LIVE at {ENV_API_URL}", flush=True)
             break
         except Exception as e:
             print(f"# Waiting for environment... ({i+1}/15) {e}", flush=True)
@@ -187,7 +186,7 @@ if __name__ == "__main__":
     available_tasks = []
     try:
         # 2. Fetch task list from the environment
-        tasks_res = requests.get(f"{API_BASE_URL}/tasks", timeout=10)
+        tasks_res = requests.get(f"{ENV_API_URL}/tasks", timeout=10)
         tasks_res.raise_for_status()
         available_tasks = tasks_res.json().get("tasks", [])
     except Exception as e:
