@@ -1,9 +1,9 @@
 import uuid
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel
 
 from app.models import TaskConfig, AutoscalerAction
@@ -100,7 +100,10 @@ def list_tasks():
 
 
 @app.post("/reset", tags=["Environment"])
-def reset(req: ResetRequest = ResetRequest()):
+def reset(req: Optional[ResetRequest] = Body(None)):
+    if req is None:
+        req = ResetRequest()
+
     """
     Start a new episode for the requested task.
 
