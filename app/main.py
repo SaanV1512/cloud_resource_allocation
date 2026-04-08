@@ -52,7 +52,7 @@ def load_tasks():
 # ---------------------------------------------------------------------------
 
 class ResetRequest(BaseModel):
-    task_id: str
+    task_id: str = "easy" #default to easy for quick testing, but can be set to medium or hard
 
 class StepRequest(BaseModel):
     session_id: str
