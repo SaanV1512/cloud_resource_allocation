@@ -62,8 +62,7 @@ class StepRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
-
-@app.get("/health", tags=["System"])
+@app.get("/", tags=["System"])
 def root():
     """
     Root endpoint required for Hugging Face Spaces health checks.
@@ -73,6 +72,8 @@ def root():
         "message": "Cloud Autoscaler API is running",
         "documentation": "/docs"
     }
+
+@app.get("/health", tags=["System"])
 def health():
     """Ping endpoint — used by the validation script to confirm the server is live."""
     return {"status": "ok", "tasks_loaded": len(TASK_CONFIGS)}
