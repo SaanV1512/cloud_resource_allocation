@@ -7,7 +7,7 @@ from app.models import AutoscalerObservation
 # --- MANDATORY CONFIGURATION ---
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("API_KEY") or "dummy_token"
+HF_TOKEN = os.getenv("HF_TOKEN")
 BENCHMARK = "cloud_resource_allocation"
 SUCCESS_SCORE_THRESHOLD = 0.5 
 
