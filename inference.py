@@ -1,11 +1,12 @@
 import os
+import time
 import requests
 import textwrap
 from openai import OpenAI
 from app.models import AutoscalerObservation
 
 # --- MANDATORY CONFIGURATION ---
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:7860")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 HF_TOKEN = os.getenv("HF_TOKEN")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
@@ -30,17 +31,14 @@ SYSTEM_PROMPT = textwrap.dedent(
 ).strip()
 
 
-def log_start(task: str, env: str, model: str) -> None:
-    print(f"[START] task={task} env={env} model={model}", flush=True)
+def log_start(task: str) -> None:
+    print(f"[START] task={task}", flush=True)
 
-def log_step(step: int, action: str, reward: float, done: bool, error: str = "null") -> None:
-    done_val = str(done).lower()
-    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error}", flush=True)
+def log_step(step: int, reward: float) -> None:
+    print(f"[STEP] step={step} reward={reward:.2f}", flush=True)
 
-def log_end(success: bool, steps: int, score: float, rewards: list) -> None:
-    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    success_val = str(success).lower()
-    print(f"[END] success={success_val} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
+def log_end(task: str, score: float, steps: int) -> None:
+    print(f"[END] task={task} score={score:.3f} steps={steps}", flush=True)
 
 
 def build_user_prompt(step: int, obs: AutoscalerObservation, last_reward: float) -> str:
@@ -108,7 +106,7 @@ def run_task(task_id):
         obs = AutoscalerObservation(**obs_data)
 
         # Only start logging once the environment actually responds
-        log_start(task=task_id, env=BENCHMARK, model=MODEL_NAME)
+        log_start(task=task_id)
         started_logging = True
 
         done = False
@@ -146,7 +144,7 @@ def run_task(task_id):
             rewards.append(reward)
 
             # Mandatory [STEP] log
-            log_step(step=step_count, action=str(action), reward=reward, done=done, error=error_val)
+            log_step(step=step_count, reward=reward)
 
         # 3. Final Grader Call
         if session_id:
@@ -166,12 +164,20 @@ def run_task(task_id):
     finally:
         # Guarantee the [END] log is emitted if [START] was reached
         if started_logging:
-            log_end(success=success, steps=step_count, score=score, rewards=rewards)
+            log_end(task=task_id, score=score, steps=step_count)
 
 
 if __name__ == "__main__":
+    # 1. Wait for server (up to 30s)
+    for i in range(15):
+        try:
+            requests.get(f"{API_BASE_URL}/health", timeout=2)
+            break
+        except Exception:
+            time.sleep(2)
+
     try:
-        # Fetch task list from the environment
+        # 2. Fetch task list from the environment
         tasks_res = requests.get(f"{API_BASE_URL}/tasks", timeout=5)
         tasks_res.raise_for_status()
         available_tasks = tasks_res.json()["tasks"]
